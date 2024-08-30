@@ -1,155 +1,166 @@
 import rclpy
-# import the ROS2 python libraries
+# import the ROS2 Python libraries to use its features
 from rclpy.node import Node
-# import the Twist module from geometry_msgs interface
+# import the Twist module from geometry_msgs interface to control robot movement
 from geometry_msgs.msg import Twist
-# import the LaserScan module from sensor_msgs interface
+# import the LaserScan module from sensor_msgs interface to receive LIDAR data
 from sensor_msgs.msg import LaserScan
+# import the Odometry module from nav_msgs interface to track robot position
 from nav_msgs.msg import Odometry
-# import Quality of Service library, to set the correct profile and reliability in order to read sensor data.
+# import Quality of Service (QoS) to set the correct profile and reliability for reading sensor data
 from rclpy.qos import ReliabilityPolicy, QoSProfile
 import math
 
-
-
-LINEAR_VEL = 0.22
-STOP_DISTANCE = 0.2
-LIDAR_ERROR = 0.05
-LIDAR_AVOID_DISTANCE = 0.7
-SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR
+# Constants defining robot behavior and safety thresholds
+LINEAR_VEL = 0.22  # Default linear velocity of the robot when moving forward
+STOP_DISTANCE = .5  # Minimum distance to an obstacle before stopping, default 0.2 meters
+LIDAR_ERROR = 0.05  # Error margin for LIDAR readings
+LIDAR_AVOID_DISTANCE = 0.9  # Distance at which the robot should start avoiding an obstacle, default 0.5 meters
+SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR  # Safe distance to avoid a collision
+# Indices of the LIDAR scan array corresponding to different directions relative to the robot
 RIGHT_SIDE_INDEX = 270
 RIGHT_FRONT_INDEX = 210
-LEFT_FRONT_INDEX=150
-LEFT_SIDE_INDEX=90
+LEFT_FRONT_INDEX = 150
+LEFT_SIDE_INDEX = 90
 
 class RandomWalk(Node):
 
     def __init__(self):
-        # Initialize the publisher
+        # Initialize the node with the name 'random_walk_node'
         super().__init__('random_walk_node')
-        self.scan_cleaned = []
-        self.stall = False
-        self.turtlebot_moving = False
+        
+        # Initialize variables for storing sensor data and robot state
+        self.scan_cleaned = []  # Cleaned LIDAR data (filtered and processed)
+        self.stall = False  # Flag to detect if the robot is stalled
+        self.turtlebot_moving = False  # Flag to indicate if the robot is currently moving
+        
+        # Create a publisher for controlling the robot's velocity
         self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
+        
+        # Subscribe to the LIDAR scan topic to receive distance measurements
         self.subscriber1 = self.create_subscription(
             LaserScan,
             '/scan',
             self.listener_callback1,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        
+        # Subscribe to the odometry topic to receive position and orientation data
         self.subscriber2 = self.create_subscription(
             Odometry,
             '/odom',
             self.listener_callback2,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.laser_forward = 0
-        self.odom_data = 0
+        
+        # Initialize additional variables for controlling the robot
+        self.laser_forward = 0  # Variable to store forward LIDAR data
+        self.odom_data = 0  # Variable to store odometry data
+        self.pose_saved = ''  # Variable to save the robot's position
+        self.cmd = Twist()  # Twist message used to control the robot's velocity
+        
+        # Create a timer to call the timer_callback function periodically (every 0.5 seconds)
         timer_period = 0.5
-        self.pose_saved=''
-        self.cmd = Twist()
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
-
     def listener_callback1(self, msg1):
-        #self.get_logger().info('scan: "%s"' % msg1.ranges)
+        """Callback function to process incoming LIDAR scan data."""
+        # Store the received scan data in a temporary variable
         scan = msg1.ranges
+        
+        # Clear the cleaned scan data list before processing new data
         self.scan_cleaned = []
-       
-        #self.get_logger().info('scan: "%s"' % scan)
-        # Assume 360 range measurements
+        
+        # Process the raw scan data to handle infinite distances and NaN values
         for reading in scan:
             if reading == float('Inf'):
+                # Replace 'Inf' readings with a maximum distance value
                 self.scan_cleaned.append(3.5)
             elif math.isnan(reading):
+                # Replace 'NaN' readings with zero
                 self.scan_cleaned.append(0.0)
             else:
-            	self.scan_cleaned.append(reading)
-
-
+                # Keep valid readings as they are
+                self.scan_cleaned.append(reading)
 
     def listener_callback2(self, msg2):
+        """Callback function to process incoming odometry data."""
+        # Extract position and orientation data from the odometry message
         position = msg2.pose.pose.position
         orientation = msg2.pose.pose.orientation
-        (posx, posy, posz) = (position.x, position.y, position.z)
-        (qx, qy, qz, qw) = (orientation.x, orientation.y, orientation.z, orientation.w)
-        self.get_logger().info('self position: {},{},{}'.format(posx,posy,posz));
-        # similarly for twist message if you need
-        self.pose_saved=position
         
-        #Example of how to identify a stall..need better tuned position deltas; wheels spin and example fast
-        #diffX = math.fabs(self.pose_saved.x- position.x)
-        #diffY = math.fabs(self.pose_saved.y - position.y)
-        #if (diffX < 0.0001 and diffY < 0.0001):
-           #self.stall = True
-        #else:
-           #self.stall = False
-           
-        return None
+        # Print the robot's current position for debugging purposes
+        self.get_logger().info('self position: {},{},{}'.format(position.x, position.y, position.z))
         
+        # Save the current position for potential use in detecting stalls or other purposes
+        self.pose_saved = position
+
     def timer_callback(self):
-        if (len(self.scan_cleaned)==0):
-    	    self.turtlebot_moving = False
-    	    return
-    	    
-        #left_lidar_samples = self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX]
-        #right_lidar_samples = self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX]
-        #front_lidar_samples = self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX]
+        """Callback function to control robot movement based on sensor data."""
+        # If no LIDAR data is available, stop the robot
+        if len(self.scan_cleaned) == 0:
+            self.turtlebot_moving = False
+            return
         
+        # Extract minimum distances in left, right, and front directions from LIDAR data
         left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])
         right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX])
         front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX])
 
-        #self.get_logger().info('left scan slice: "%s"'%  min(left_lidar_samples))
-        #self.get_logger().info('front scan slice: "%s"'%  min(front_lidar_samples))
-        #self.get_logger().info('right scan slice: "%s"'%  min(right_lidar_samples))
-
+        # Check if there's an obstacle within the safe stopping distance
         if front_lidar_min < SAFE_STOP_DISTANCE:
-            if self.turtlebot_moving == True:
-                self.cmd.linear.x = 0.0 
-                self.cmd.angular.z = 0.0 
+            if self.turtlebot_moving:
+                # Stop the robot if it's currently moving and an obstacle is too close
+                self.cmd.linear.x = 0.0
+                self.cmd.angular.z = 0.0
                 self.publisher_.publish(self.cmd)
                 self.turtlebot_moving = False
                 self.get_logger().info('Stopping')
                 return
+        
+        # Check if the robot should start avoiding an obstacle
         elif front_lidar_min < LIDAR_AVOID_DISTANCE:
-                self.cmd.linear.x = 0.07 
-                if (right_lidar_min > left_lidar_min):
-                   self.cmd.angular.z = -0.3
-                else:
-                   self.cmd.angular.z = 0.3
-                self.publisher_.publish(self.cmd)
-                self.get_logger().info('Turning')
-                self.turtlebot_moving = True
+            # Slow down and turn in the direction with more space
+            self.cmd.linear.x = 0.07
+            if right_lidar_min > left_lidar_min:
+                self.cmd.angular.z = -0.3  # Turn right
+            else:
+                self.cmd.angular.z = 0.3  # Turn left
+            self.publisher_.publish(self.cmd)
+            self.get_logger().info('Turning')
+            self.turtlebot_moving = True
+        
+        # If there's no immediate obstacle, move forward at the normal speed
         else:
             self.cmd.linear.x = 0.3
-            self.cmd.linear.z = 0.0
+            self.cmd.angular.z = 0.0
             self.publisher_.publish(self.cmd)
             self.turtlebot_moving = True
-            
-
-        self.get_logger().info('Distance of the obstacle : %f' % front_lidar_min)
-        self.get_logger().info('I receive: "%s"' %
-                               str(self.odom_data))
-        if self.stall == True:
-           self.get_logger().info('Stall reported')
         
-        # Display the message on the console
+        # Log the distance to the nearest obstacle and the robot's current odometry data
+        self.get_logger().info('Distance of the obstacle: %f' % front_lidar_min)
+        self.get_logger().info('I receive: "%s"' % str(self.odom_data))
+        
+        # Log a message if the robot is stalled (if stall detection is implemented)
+        if self.stall:
+            self.get_logger().info('Stall reported')
+        
+        # Log the current command being sent to the robot
         self.get_logger().info('Publishing: "%s"' % self.cmd)
- 
-
 
 def main(args=None):
-    # initialize the ROS communication
+    # Initialize the ROS communication
     rclpy.init(args=args)
-    # declare the node constructor
+    
+    # Create an instance of the RandomWalk node
     random_walk_node = RandomWalk()
-    # pause the program execution, waits for a request to kill the node (ctrl+c)
+    
+    # Keep the node running, waiting for data and processing callbacks
     rclpy.spin(random_walk_node)
-    # Explicity destroy the node
+    
+    # Destroy the node explicitly when shutting down
     random_walk_node.destroy_node()
-    # shutdown the ROS communication
+    
+    # Shutdown the ROS communication
     rclpy.shutdown()
-
-
 
 if __name__ == '__main__':
     main()
