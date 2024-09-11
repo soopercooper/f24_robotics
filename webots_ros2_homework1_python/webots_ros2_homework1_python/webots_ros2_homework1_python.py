@@ -1,3 +1,4 @@
+import os
 import rclpy
 # import the ROS2 Python libraries to use its features
 from rclpy.node import Node
@@ -10,10 +11,11 @@ from nav_msgs.msg import Odometry
 # import Quality of Service (QoS) to set the correct profile and reliability for reading sensor data
 from rclpy.qos import ReliabilityPolicy, QoSProfile
 import math
+import re
 
 # Constants defining robot behavior and safety thresholds
 LINEAR_VEL = 0.22  # Default linear velocity of the robot when moving forward
-STOP_DISTANCE = 0.4  # Minimum distance to an obstacle before stopping, default 0.2 meters
+STOP_DISTANCE = 0.5  # Minimum distance to an obstacle before stopping, default 0.2 meters
 LIDAR_ERROR = 0.05  # Error margin for LIDAR readings
 LIDAR_AVOID_DISTANCE = .7  # Distance at which the robot should start avoiding an obstacle, default 0.5 meters
 SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR  # Safe distance to avoid a collision
@@ -27,6 +29,44 @@ NO_ROTATION_SPEED = 0.0  # Angular velocity of the robot when not turning
 MAX_LINEAR_SPEED = 0.2  # Maximum linear velocity of the robot when moving forward
 NO_LINEAR_SPEED = 0.0  # Linear velocity of the robot when not moving forward
 
+def extract_turtlebot_start(file_path):
+    translation = None
+    rotation = None
+    in_turtlebot_section = False
+
+    with open(file_path, 'r') as file:
+        for line in file:
+            # Ignore commented-out lines
+            line = line.strip()
+            if line.startswith('#') or not line:
+                continue
+
+            # Check if entering TurtleBot3Burger section
+            if 'TurtleBot3Burger {' in line:
+                in_turtlebot_section = True
+
+            # Exit TurtleBot3Burger section
+            if in_turtlebot_section and '}' in line:
+                break
+
+            # Extract translation and rotation if within the TurtleBot3Burger block
+            if in_turtlebot_section:
+                translation_match = re.match(r'translation\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)', line)
+                rotation_match = re.match(r'rotation\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)', line)
+
+                if translation_match:
+                    translation = tuple(map(float, translation_match.groups()))
+                elif rotation_match:
+                    rotation = tuple(map(float, rotation_match.groups()))
+
+    if translation and rotation:
+        return {'translation': translation, 'rotation': rotation}
+    else:
+        return "TurtleBot3Burger start values not found."
+
+
+
+
 class RandomWalk(Node):
 
     def __init__(self):
@@ -37,6 +77,7 @@ class RandomWalk(Node):
         self.scan_cleaned = []  # Cleaned LIDAR data (filtered and processed)
         self.stall = False  # Flag to detect if the robot is stalled
         self.turtlebot_moving = False  # Flag to indicate if the robot is currently moving
+        self.first_pos_store = False  # Flag to store the first position of the robot
         
         # Create a publisher for controlling the robot's velocity
         self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
@@ -59,8 +100,6 @@ class RandomWalk(Node):
         self.laser_forward = 0  # Variable to store forward LIDAR data
         self.odom_data = 0  # Variable to store odometry data
         self.pose_saved = ''  # Variable to save the robot's position
-        self.rolling_past_distance = []  # List to store past positions for stall detection
-        self.store_ticker = 0  # Variable to store the current tick count
         self.cmd = Twist()  # Twist message used to control the robot's velocity
         
         # Create a timer to call the timer_callback function periodically (every 0.5 seconds)
@@ -93,32 +132,31 @@ class RandomWalk(Node):
         position = msg2.pose.pose.position
         orientation = msg2.pose.pose.orientation
         
-        # Print the robot's current position for debugging purposes
-        # self.get_logger().info('self position: {},{},{}'.format(position.x, position.y, position.z))
-
-        # if self.pose_saved != '' and len(self.rolling_past_distance) >= 10:
-        #     # Calculate the Euclidean distance between the current and previous positions
-        #     average_distance = sum(self.rolling_past_distance) / len(self.rolling_past_distance)
-
-        #     self.get_logger().info('Average distance: %f' % average_distance)
-
-        #     # Check if the robot has stalled by comparing the current and previous positions
-        #     if average_distance < 0.01:
-        #         self.stall = True
-        #         self.rolling_past_distance = []
-        #         self.get_logger().info('Stall detected')
-        #     else:
-        #         self.stall = False
-
-        # # Save the current position for potential use in detecting stalls or other purposes
-        # if self.store_ticker % 100 == 0 and self.pose_saved != '':
-        #     self.rolling_past_distance.append(math.sqrt((position.x - self.pose_saved.x)**2 + (position.y - self.pose_saved.y)**2))
-        #     self.store_ticker = 0
-        # if len(self.rolling_past_distance) > 100:
-        #     self.rolling_past_distance.pop(0)
         self.pose_saved = position
-        # self.store_ticker += 1
 
+        if not self.first_pos_store:
+            file_path = '/home/main/Documents/f24_robotics/webots_ros2_homework1_python/worlds/f23_robotics_1.wbt'
+            turtlebot_start = extract_turtlebot_start(file_path)
+            self.first_pos_store = True
+            counter = 0
+            # Grab the files in the directory, and check the highest number
+            for file in os.listdir('Homework1/data'):
+                if file.startswith('robot_position') and str(turtlebot_start["translation"]) in file:
+                    counter = max(counter, int(file.split('_')[-1].split('.')[0])) + 1
+
+            self.file_name = f'Homework1/data/robot_position_{turtlebot_start["translation"]}_{counter}.txt'
+
+            with open(self.file_name, 'w') as f:
+                if turtlebot_start != "TurtleBot3Burger start values not found.":
+                    f.write(f'start -> translation: {turtlebot_start["translation"]}| rotation: {turtlebot_start["rotation"]}\n')
+
+                f.write(f'x: {self.pose_saved.x}, y: {self.pose_saved.y}\n')
+            self.store_timer = self.create_timer(5, self.store_timer_callback)
+
+    def store_timer_callback(self):
+        with open(self.file_name, 'a') as f:
+            f.write(f'x: {self.pose_saved.x}, y: {self.pose_saved.y}\n')
+            
     def timer_callback(self):
         """Callback function to control robot movement based on sensor data."""
         # If no LIDAR data is available, stop the robot
@@ -130,6 +168,14 @@ class RandomWalk(Node):
         left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])
         right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX])
         front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX])
+
+        # if self.stall and self.store_ticker >= 0:
+        #     # Stop the robot if it's currently moving and an obstacle is too close
+        #     self.cmd.linear.x = -MAX_LINEAR_SPEED
+        #     self.cmd.angular.z = NO_LINEAR_SPEED
+        #     self.publisher_.publish(self.cmd)
+        #     self.get_logger().info('Reversing')
+        #     return
 
         # Check if there's an obstacle within the safe stopping distance
         if front_lidar_min < SAFE_STOP_DISTANCE:
@@ -163,6 +209,7 @@ class RandomWalk(Node):
             self.publisher_.publish(self.cmd)
             self.get_logger().info('Turning %s' % text_direction)
             self.turtlebot_moving = True
+            return
         
         # If there's no immediate obstacle, move forward at the normal speed
         else:
@@ -175,7 +222,7 @@ class RandomWalk(Node):
                 self.cmd.linear.x = MAX_LINEAR_SPEED / 2
                 self.get_logger().info('Moving closer to the wall')
             # Check if the right wall is too close
-            elif right_lidar_min < 0.3:
+            elif right_lidar_min < 0.2:
                 self.cmd.angular.z = MAX_ROTATION_SPEED
                 # Move away from the wall
                 self.cmd.linear.x = MAX_LINEAR_SPEED / 2
@@ -185,18 +232,20 @@ class RandomWalk(Node):
                 # Apply a cubic function to smoothly reduce angular speed
                 # Scale the rotation speed based on the distance to the wall (between 0.3 and 1.0)
                 proportional_speed = (right_lidar_min - 0.5) / (1.0 - 0.5)  # Normalize between 0 and 1
-                self.cmd.angular.z = -MAX_ROTATION_SPEED / 2 * (1 - proportional_speed ** 3)
+                self.cmd.angular.z = -MAX_ROTATION_SPEED * (proportional_speed ** .5)
+                self.cmd.linear.x = MAX_LINEAR_SPEED * 0.75
                 self.get_logger().info(f'Adjusting rotation, angular.z = {self.cmd.angular.z}')
 
             self.publisher_.publish(self.cmd)
             self.turtlebot_moving = True
         
         # Log the distance to the nearest obstacle and the robot's current odometry data
-        self.get_logger().info('Distance of the obstacle: %f and I receive: "%s". Distance to the right wall: %f' % (front_lidar_min, self.odom_data, right_lidar_min))
+        # self.get_logger().info('Distance of the obstacle: %f and I receive: "%s". Distance to the right wall: %f' % (front_lidar_min, self.odom_data, right_lidar_min))
         
         # Log a message if the robot is stalled (if stall detection is implemented)
         if self.stall:
-            self.get_logger().info('Stall reported')
+            # self.get_logger().info('Stall reported')
+            pass
         
         # Log the current command being sent to the robot
         # self.get_logger().info('Publishing: "%s"' % self.cmd)
