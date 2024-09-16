@@ -114,3 +114,7 @@ elif right_lidar_min > 0.5:
 ### Rationale for Approach
 
 The chosen approach leverages a combination of dynamic obstacle avoidance and wall-following behavior to enable the robot to explore the apartment zones autonomously. By using LIDAR data to detect obstacles and adjust its movement accordingly, the robot can navigate the environment safely and efficiently. The wall-following behavior complements the obstacle avoidance mechanism by ensuring that the robot covers the space systematically without colliding with walls. This approach strikes a balance between reactive and proactive navigation strategies, allowing the robot to adapt to its surroundings while maintaining a consistent exploration pattern.
+
+## Github
+
+https://github.com/AveryUALibrary/f24_robotics/tree/main
