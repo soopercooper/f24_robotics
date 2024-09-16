@@ -142,7 +142,9 @@ class RandomWalk(Node):
             # Grab the files in the directory, and check the highest number
             for file in os.listdir('Homework1/data'):
                 if file.startswith('robot_position') and str(turtlebot_start["translation"]) in file:
-                    counter = max(counter, int(file.split('_')[-1].split('.')[0])) + 1
+                    counter = max(counter, int(file.split('_')[-1].split('.')[0]))
+
+            counter += 1
 
             self.file_name = f'Homework1/data/robot_position_{turtlebot_start["translation"]}_{counter}.txt'
 
