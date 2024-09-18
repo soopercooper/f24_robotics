@@ -15,4 +15,4 @@ Tutorials to complete:
 ***Homework Assignment 1***
 
 * [Webots/ROS2/Heuristic Search](./Homework1/Assignment.md)
-* [Homeowrk 1 Submission](./Homework1/submission.md)
+* [Homework 1 Submission](./Homework1/submission.md)
