@@ -19,3 +19,16 @@
 
 ## Launch
 Run the launch file to start the AprilTag node and the robot controller.
+
+
+# Install packages ->
+
+```
+raspi-config
+ros-humble-image-common
+ros-humble-image-transport
+ros-humble-v4l2-camera
+ros-humble-rqt-image-view
+ros-humble-apriltag-ros
+ros-humble-apriltag-msgs
+```

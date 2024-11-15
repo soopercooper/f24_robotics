@@ -99,12 +99,15 @@ def generate_launch_description():
         nodes_to_start= ros_control_spawners
     )
 
+    rviz_config_dir = os.path.join(get_package_share_directory('webots_ros2_homework1_python'),
+                                   'rviz', 'turtlebot3_apriltags.rviz')
+
 
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='f23_robotics_1.wbt',
+            default_value='turtlebot3_apriltags.wbt',
             description='Choose one of the world files from `/webots_ros2_turtlebot/world` directory'
         ),
         DeclareLaunchArgument(
@@ -129,5 +132,13 @@ def generate_launch_description():
                     launch.actions.EmitEvent(event=launch.events.Shutdown())
                 ],
             )
+        ),
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            arguments=['-d', rviz_config_dir],
+            parameters=[{'use_sim_time': use_sim_time}],
+            output='screen'
         ),
     ])
