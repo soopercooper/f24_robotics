@@ -1,182 +1,167 @@
 import rclpy
-# import the ROS2 Python libraries to use its features
 from rclpy.node import Node
-# import the Twist module from geometry_msgs interface to control robot movement
 from geometry_msgs.msg import Twist
-# import the LaserScan module from sensor_msgs interface to receive LIDAR data
 from sensor_msgs.msg import LaserScan
-# import the Odometry module from nav_msgs interface to track robot position
 from nav_msgs.msg import Odometry
-# import Quality of Service (QoS) to set the correct profile and reliability for reading sensor data
 from rclpy.qos import ReliabilityPolicy, QoSProfile
+from apriltag_msgs.msg import AprilTagDetectionArray  # Import AprilTag message type
 import math
 
-# Constants defining robot behavior and safety thresholds
-LINEAR_VEL = 0.22  # Default linear velocity of the robot when moving forward
-STOP_DISTANCE = 0.5  # Minimum distance to an obstacle before stopping, default 0.2 meters
-LIDAR_ERROR = 0.05  # Error margin for LIDAR readings
-LIDAR_AVOID_DISTANCE = .7  # Distance at which the robot should start avoiding an obstacle, default 0.5 meters
-SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR  # Safe distance to avoid a collision
+# Constants for robot movement and distances
+LINEAR_VEL = 0.22               # Default linear velocity
+STOP_DISTANCE = 0.5             # Distance at which the robot should stop to avoid collision
+LIDAR_ERROR = 0.05              # Error tolerance for LIDAR readings
+LIDAR_AVOID_DISTANCE = 0.7      # Distance threshold for obstacle avoidance
+SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR  # Calculated safe stop distance considering error
 
-# Indices of the LIDAR scan array corresponding to different directions relative to the robot
+# Indices in the LaserScan array for different directions relative to robot orientation
 RIGHT_SIDE_INDEX = 270
 RIGHT_FRONT_INDEX = 210
 LEFT_FRONT_INDEX = 150
 LEFT_SIDE_INDEX = 90
-MAX_ROTATION_SPEED = 0.5  # Maximum angular velocity of the robot when turning
-NO_ROTATION_SPEED = 0.0  # Angular velocity of the robot when not turning
-MAX_LINEAR_SPEED = 0.2  # Maximum linear velocity of the robot when moving forward
-NO_LINEAR_SPEED = 0.0  # Linear velocity of the robot when not moving forward
+
+# Rotation and speed parameters
+MAX_ROTATION_SPEED = 0.5   # Maximum rotational speed
+NO_ROTATION_SPEED = 0.0    # Zero rotational speed (no rotation)
+MAX_LINEAR_SPEED = 0.2     # Maximum linear speed
+NO_LINEAR_SPEED = 0.0      # Zero linear speed (no forward movement)
 
 class RandomWalk(Node):
-
+    """
+    A ROS2 node that controls a Turtlebot to move randomly and avoid obstacles,
+    using LaserScan data for obstacle avoidance and AprilTag detection for logging detections.
+    """
     def __init__(self):
-        # Initialize the node with the name 'random_walk_node'
         super().__init__('random_walk_node')
         
-        # Initialize variables for storing sensor data and robot state
-        self.scan_cleaned = []  # Cleaned LIDAR data (filtered and processed)
-        self.stall = False  # Flag to detect if the robot is stalled
-        self.turtlebot_moving = False  # Flag to indicate if the robot is currently moving
-        self.first_pos_store = False  # Flag to store the first position of the robot
+        # Initialize variables
+        self.scan_cleaned = []         # Processed LIDAR scan data
+        self.turtlebot_moving = False  # Flag to indicate whether Turtlebot is moving
         
-        # Create a publisher for controlling the robot's velocity
+        # Create publisher for movement commands (Twist messages on 'cmd_vel' topic)
         self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
         
-        # Subscribe to the LIDAR scan topic to receive distance measurements
-        self.subscriber1 = self.create_subscription(
+        # Create subscription to LaserScan data topic '/scan'
+        # This subscription uses a QoS profile with a best effort reliability since LaserScan data is frequent
+        self.create_subscription(
             LaserScan,
             '/scan',
             self.listener_callback1,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        )
         
-        # Subscribe to the odometry topic to receive position and orientation data
-        self.subscriber2 = self.create_subscription(
-            Odometry,
-            '/odom',
-            self.listener_callback2,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        # Create subscription to AprilTag detections topic '/detections'
+        # Also uses a QoS profile with a best effort reliability
+        self.create_subscription(
+            AprilTagDetectionArray,
+            '/detections',
+            self.apriltag_callback,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        )
         
-        # Initialize additional variables for controlling the robot
-        self.laser_forward = 0  # Variable to store forward LIDAR data
-        self.odom_data = 0  # Variable to store odometry data
-        self.pose_saved = ''  # Variable to save the robot's position
-        self.cmd = Twist()  # Twist message used to control the robot's velocity
+        # Initialize Twist message for controlling linear and angular velocity
+        self.cmd = Twist()
         
-        # Create a timer to call the timer_callback function periodically (every 0.5 seconds)
-        timer_period = 0.5
-        self.timer = self.create_timer(timer_period, self.timer_callback)
+        # Create a timer to call `timer_callback` at a fixed rate (every 0.5 seconds)
+        self.timer = self.create_timer(0.5, self.timer_callback)
+        
+        # Set to track IDs of detected AprilTags to avoid logging duplicates
+        self.detected_tags = set()
 
-    def listener_callback1(self, msg1):
-        """Callback function to process incoming LIDAR scan data."""
-        # Store the received scan data in a temporary variable
-        scan = msg1.ranges
+    def listener_callback1(self, msg):
+        """
+        Callback function for LaserScan data.
+        Cleans and processes the incoming LIDAR scan data for obstacle avoidance.
         
-        # Clear the cleaned scan data list before processing new data
-        self.scan_cleaned = []
-        
-        # Process the raw scan data to handle infinite distances and NaN values
-        for reading in scan:
-            if reading == float('Inf'):
-                # Replace 'Inf' readings with a maximum distance value
-                self.scan_cleaned.append(3.5)
-            elif math.isnan(reading):
-                # Replace 'NaN' readings with zero
-                self.scan_cleaned.append(0.0)
-            else:
-                # Keep valid readings as they are
-                self.scan_cleaned.append(reading)
+        :param msg: The LaserScan message containing ranges of obstacles around the robot
+        """
+        scan = msg.ranges
+        # Replace infinite values with a max range (3.5m) for processing
+        # If a range is not infinite, limit it to a maximum of 3.5 if it's more than that (for safety)
+        self.scan_cleaned = [min(r, 3.5) if r != float('Inf') else 3.5 for r in scan]
 
-    def listener_callback2(self, msg2):
-        """Callback function to process incoming odometry data."""
-        # Extract position and orientation data from the odometry message
-        position = msg2.pose.pose.position
-        orientation = msg2.pose.pose.orientation
+    def apriltag_callback(self, msg):
+        """
+        Callback function for AprilTag detections.
+        Logs information about newly detected AprilTags to avoid repeated logging of the same tag.
         
-        self.pose_saved = position
+        :param msg: The AprilTagDetectionArray message containing detected AprilTags data
+        """
+        for detection in msg.detections:
+            tag_id = detection.id[0]  # Extract the first ID from the detected tag (assuming single ID)
+            # Check if we have already detected this tag ID
+            if tag_id not in self.detected_tags:
+                # Add this tag ID to the set of detected tags to avoid duplicates
+                self.detected_tags.add(tag_id)
+                # Log information about the detected tag, including its ID and full detection info
+                self.get_logger().info(f"Tag detected: ID {tag_id}, Info: {detection}")
 
     def timer_callback(self):
-        """Callback function to control robot movement based on sensor data."""
-        # If no LIDAR data is available, stop the robot
+        """
+        Timer callback function that executes at a fixed interval (0.5 seconds).
+        It uses processed LIDAR data to control the robot's movement for obstacle avoidance and navigation.
+        """
+        # If we have no processed scan data, stop the robot and return
         if len(self.scan_cleaned) == 0:
             self.turtlebot_moving = False
             return
         
-        # Extract minimum distances in left, right, and front directions from LIDAR data
-        left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])
-        right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX])
-        front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX])
+        # Determine minimum distances in critical directions from the LaserScan data
+        left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])   # Minimum distance on left side
+        right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX]) # Minimum distance on right side
+        front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX]) # Minimum distance in front
 
-        # Check if there's an obstacle within the safe stopping distance
+        # If there's an obstacle too close in front of the robot
         if front_lidar_min < SAFE_STOP_DISTANCE:
-            # if self.stall:
+            # Stop linear movement and rotate to avoid obstacle
             self.cmd.linear.x = NO_LINEAR_SPEED
             self.cmd.angular.z = MAX_ROTATION_SPEED
-            self.publisher_.publish(self.cmd)
-            self.get_logger().info('Rotating')
-            return
         
-        # Check if the robot should start avoiding an obstacle
+        # If there's an obstacle ahead but not too close, start avoiding it
         elif front_lidar_min < LIDAR_AVOID_DISTANCE:
-            # Slow down and turn in the direction with more space
+            # Move forward slowly
             self.cmd.linear.x = MAX_LINEAR_SPEED / 4
-            text_direction = None
-            if right_lidar_min > left_lidar_min:
-                self.cmd.angular.z = -MAX_ROTATION_SPEED  # Turn right
-                text_direction = 'right'
-            self.publisher_.publish(self.cmd)
-            self.get_logger().info('Turning %s' % text_direction)
-            self.turtlebot_moving = True
-            return
+            # Rotate away from the closer side to avoid the obstacle
+            self.cmd.angular.z = -MAX_ROTATION_SPEED if right_lidar_min > left_lidar_min else MAX_ROTATION_SPEED
         
-        # If there's no immediate obstacle, move forward at the normal speed
         else:
+            # Clear path ahead, move forward
             self.cmd.linear.x = MAX_LINEAR_SPEED
             self.cmd.angular.z = NO_ROTATION_SPEED
-            # Check if the right wall is too far away
+            
+            # Additional logic for adjusting orientation based on right side distance
             if right_lidar_min > 1.0:
+                # If the right side is clear, turn slightly right
                 self.cmd.angular.z = -MAX_ROTATION_SPEED
-                # Move closer to follow the wall
                 self.cmd.linear.x = MAX_LINEAR_SPEED / 2
-                self.get_logger().info('Moving closer to the wall')
-            # Check if the right wall is too close
             elif right_lidar_min < 0.2:
+                # If the right side is too close, turn left to keep distance
                 self.cmd.angular.z = MAX_ROTATION_SPEED
-                # Move away from the wall
                 self.cmd.linear.x = MAX_LINEAR_SPEED / 2
-                self.get_logger().info('Moving away from the wall')
-            # If the right wall is within the acceptable range, adjust angular speed smoothly
-            elif right_lidar_min > 0.5:
-                # Apply a cubic function to smoothly reduce angular speed
-                # Scale the rotation speed based on the distance to the wall (between 0.3 and 1.0)
-                proportional_speed = (right_lidar_min - 0.5) / (1.0 - 0.5)  # Normalize between 0 and 1
-                self.cmd.angular.z = -MAX_ROTATION_SPEED * (proportional_speed ** .5)
-                self.cmd.linear.x = MAX_LINEAR_SPEED * 0.75
-                self.get_logger().info(f'Adjusting rotation, angular.z = {self.cmd.angular.z}')
 
-            self.publisher_.publish(self.cmd)
-            self.turtlebot_moving = True
-        
-        # Log a message if the robot is stalled (if stall detection is implemented)
-        if self.stall:
-            # self.get_logger().info('Stall reported')
-            pass
+        # Publish the computed velocity command to the robot
+        self.publisher_.publish(self.cmd)
+
 
 def main(args=None):
-    # Initialize the ROS communication
+    """
+    Entry point for the ROS2 node.
+    Initializes the ROS2 communication, creates the RandomWalk node,
+    and spins it to process callbacks until shutdown.
+    """
+    # Initialize the ROS2 Python client library
     rclpy.init(args=args)
     
     # Create an instance of the RandomWalk node
     random_walk_node = RandomWalk()
     
-    # Keep the node running, waiting for data and processing callbacks
+    # Spin the node so its callbacks can be processed
     rclpy.spin(random_walk_node)
     
-    # Destroy the node explicitly when shutting down
+    # Once the node is killed or exits, destroy it and shut down ROS2
     random_walk_node.destroy_node()
-    
-    # Shutdown the ROS communication
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
