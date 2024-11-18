@@ -4,6 +4,7 @@
 1. **Wall Following**:
    - The robot moves along walls using LIDAR data.
    - Adjusts speed and direction to avoid obstacles while maintaining proximity to walls.
+   - Turns around in a circle every 10 seconds to try to find AprilTags.
 
 2. **AprilTag Detection**:
    - Subscribes to `/detections` for AprilTag data.
