@@ -6,6 +6,7 @@ from nav_msgs.msg import Odometry
 from rclpy.qos import ReliabilityPolicy, QoSProfile
 from apriltag_msgs.msg import AprilTagDetectionArray  # Import AprilTag message type
 import math
+from time import time, sleep
 
 # Constants for robot movement and distances
 LINEAR_VEL = 0.22               # Default linear velocity
@@ -22,6 +23,7 @@ LEFT_SIDE_INDEX = 90
 
 # Rotation and speed parameters
 MAX_ROTATION_SPEED = 0.5   # Maximum rotational speed
+MAX_CHECK_SPEED = 1.5708
 NO_ROTATION_SPEED = 0.0    # Zero rotational speed (no rotation)
 MAX_LINEAR_SPEED = 0.2     # Maximum linear speed
 NO_LINEAR_SPEED = 0.0      # Zero linear speed (no forward movement)
@@ -35,6 +37,10 @@ class RandomWalk(Node):
         super().__init__('random_walk_node')
         
         # Initialize variables
+        self.turn = True
+        self.start_time = time()
+        self.expected_runtime = math.radians(360) / MAX_CHECK_SPEED
+
         self.scan_cleaned = []         # Processed LIDAR scan data
         self.turtlebot_moving = False  # Flag to indicate whether Turtlebot is moving
         
@@ -102,44 +108,57 @@ class RandomWalk(Node):
         It uses processed LIDAR data to control the robot's movement for obstacle avoidance and navigation.
         """
         # If we have no processed scan data, stop the robot and return
-        if len(self.scan_cleaned) == 0:
-            self.turtlebot_moving = False
-            return
-        
-        # Determine minimum distances in critical directions from the LaserScan data
-        left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])   # Minimum distance on left side
-        right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX]) # Minimum distance on right side
-        front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX]) # Minimum distance in front
+        self.current_time = time()
+        if(self.current_time - self.start_time > self.expected_runtime):
+            if(self.turn == True):
+                print("turn is now false")
+                self.turn = False
+                self.start_time = time()
+                self.expected_runtime = 10
+            elif(self.turn == False):
+                print("turn is now true")
+                self.turn = True
+                self.start_time = time()
+                self.expected_runtime = math.radians(360) / MAX_CHECK_SPEED
 
-        # If there's an obstacle too close in front of the robot
-        if front_lidar_min < SAFE_STOP_DISTANCE:
-            # Stop linear movement and rotate to avoid obstacle
-            self.cmd.linear.x = NO_LINEAR_SPEED
-            self.cmd.angular.z = MAX_ROTATION_SPEED
-        
-        # If there's an obstacle ahead but not too close, start avoiding it
-        elif front_lidar_min < LIDAR_AVOID_DISTANCE:
-            # Move forward slowly
-            self.cmd.linear.x = MAX_LINEAR_SPEED / 4
-            # Rotate away from the closer side to avoid the obstacle
-            self.cmd.angular.z = -MAX_ROTATION_SPEED if right_lidar_min > left_lidar_min else MAX_ROTATION_SPEED
-        
+        if(self.turn == True):
+            self.cmd.linear.x = 0.0
+            self.cmd.angular.z = MAX_CHECK_SPEED
         else:
-            # Clear path ahead, move forward
-            self.cmd.linear.x = MAX_LINEAR_SPEED
-            self.cmd.angular.z = NO_ROTATION_SPEED
-            
-            # Additional logic for adjusting orientation based on right side distance
-            if right_lidar_min > 1.0:
-                # If the right side is clear, turn slightly right
-                self.cmd.angular.z = -MAX_ROTATION_SPEED
-                self.cmd.linear.x = MAX_LINEAR_SPEED / 2
-            elif right_lidar_min < 0.2:
-                # If the right side is too close, turn left to keep distance
-                self.cmd.angular.z = MAX_ROTATION_SPEED
-                self.cmd.linear.x = MAX_LINEAR_SPEED / 2
+            if len(self.scan_cleaned) == 0:
+                self.turtlebot_moving = False
+                return
+            # Determine minimum distances in critical directions from the LaserScan data
+            left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])   # Minimum distance on left side
+            right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX]) # Minimum distance on right side
+            front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX]) # Minimum distance in front
 
-        # Publish the computed velocity command to the robot
+            # If there's an obstacle too close in front of the robot
+            if front_lidar_min < SAFE_STOP_DISTANCE:
+                # Stop linear movement and rotate to avoid obstacle
+                self.cmd.linear.x = NO_LINEAR_SPEED
+                self.cmd.angular.z = MAX_ROTATION_SPEED
+            # If there's an obstacle ahead but not too close, start avoiding it
+            elif front_lidar_min < LIDAR_AVOID_DISTANCE:
+                # Move forward slowly
+                self.cmd.linear.x = MAX_LINEAR_SPEED / 4
+                # Rotate away from the closer side to avoid the obstacle
+                self.cmd.angular.z = -MAX_ROTATION_SPEED if right_lidar_min > left_lidar_min else MAX_ROTATION_SPEED
+            else:
+                # Clear path ahead, move forward
+                self.cmd.linear.x = MAX_LINEAR_SPEED
+                self.cmd.angular.z = NO_ROTATION_SPEED
+                # Additional logic for adjusting orientation based on right side distance
+                if right_lidar_min > 1.0:
+                    # If the right side is clear, turn slightly right
+                    self.cmd.angular.z = -MAX_ROTATION_SPEED
+                    self.cmd.linear.x = MAX_LINEAR_SPEED / 2
+                elif right_lidar_min < 0.2:
+                    # If the right side is too close, turn left to keep distance
+                    self.cmd.angular.z = MAX_ROTATION_SPEED
+                    self.cmd.linear.x = MAX_LINEAR_SPEED / 2
+
+            # Publish the computed velocity command to the robot
         self.publisher_.publish(self.cmd)
 
 
