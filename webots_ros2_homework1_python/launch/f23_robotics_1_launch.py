@@ -76,6 +76,38 @@ def generate_launch_description():
         prefix=controller_manager_prefix,
         arguments=['joint_state_broadcaster'] + controller_manager_timeout,
     )
+    apriltag_node = Node(
+        package='apriltag_ros',
+        executable='apriltag_node',
+        name='apriltag_node',
+        output='screen',
+        remappings=[
+            ('/image_rect', '/camera/image_raw'),
+            ('/camera_info', '/camera/camera_info')
+        ],
+        parameters=[{
+            'tag_family': 'tag36h11',
+            'tag_size': 0.165,  # Replace with the actual size of your tags
+            'camera_frame': 'camera_link'
+        }]
+    )
+    camera_node = Node(
+        package='v4l2_camera',
+        executable='v4l2_camera_node',
+        name='camera_node',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    random_walk_node = Node(
+        package='webots_ros2_homework1_python',
+        executable='random_walk',
+        name='random_walk_node',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+
+
     ros_control_spawners = [diffdrive_controller_spawner, joint_state_broadcaster_spawner]
 
     robot_description_path = os.path.join(package_dir, 'resource', 'turtlebot_webots.urdf')
@@ -114,6 +146,16 @@ def generate_launch_description():
             'mode',
             default_value='realtime',
             description='Webots startup mode'
+        ),
+        DeclareLaunchArgument(
+            'tag_family',
+            default_value='tag36h11',
+            description='AprilTag family used for detection.'
+        ),
+        DeclareLaunchArgument(
+            'camera_topic',
+            default_value='/camera/image_raw',
+            description='Topic for the camera image stream.'
         ),
         webots,
         webots._supervisor,
