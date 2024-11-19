@@ -82,8 +82,8 @@ def generate_launch_description():
         name='apriltag_node',
         output='screen',
         remappings=[
-            ('/image_rect', '/camera/image_raw'),
-            ('/camera_info', '/camera/camera_info')
+            ('/image_rect', '/image_raw'),
+            ('/camera_info', '/camera_info')
         ],
         parameters=[{
             'tag_family': 'tag36h11',

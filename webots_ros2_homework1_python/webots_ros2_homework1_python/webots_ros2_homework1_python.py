@@ -166,6 +166,9 @@ class RandomWalk(Node):
                     self.get_logger().info(console_message)
                     self.last_log_message = console_message
 
+                # Log full detection information to the console
+                self.get_logger().info(log_message)
+
     def timer_callback(self):
         """
         Timer callback function that executes at a fixed interval.

@@ -67,3 +67,20 @@ ros-humble-rqt-image-view
 ros-humble-apriltag-ros
 ros-humble-apriltag-msgs
 ```
+
+## Calibration
+
+Calibrate the camera using the following command:
+```
+ros2 run camera_calibration cameracalibrator --size 8x6 --square 0.024 image:=/image_raw camera:=/
+```
+
+Then update the camera info in the launch file.
+```
+parameters=[{
+    'camera_info_url': 'file:///path/to/your/calibration.yaml', # Replace with the actual path
+    'tag_family': 'tag36h11',
+    'tag_size': 0.165,  # Replace with the actual size of your tags
+    'camera_frame': 'camera_link'
+}]
+```
