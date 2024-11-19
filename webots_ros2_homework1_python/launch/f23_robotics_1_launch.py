@@ -161,6 +161,10 @@ def generate_launch_description():
         webots._supervisor,
         waiting_nodes,
 
+        apriltag_node,
+        camera_node,
+        random_walk_node,
+
         robot_state_publisher,
         footprint_publisher,
 

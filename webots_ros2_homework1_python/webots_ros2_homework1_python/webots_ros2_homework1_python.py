@@ -94,6 +94,15 @@ class RandomWalk(Node):
         # Create a timer to call `timer_callback` at a fixed rate (every 0.1 seconds)
         self.timer = self.create_timer(0.1, self.timer_callback)
 
+        # Create a timer to enable scanning after a certain time
+        self.scan_timer = self.create_timer(10.0, self.enable_scanning)
+
+    def enable_scanning(self):
+        """
+        Timer callback function to enable scanning after a certain time.
+        """
+        self.turn = True
+
     def listener_callback1(self, msg):
         """
         Callback function for LaserScan data.
