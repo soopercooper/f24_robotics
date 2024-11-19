@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <robot name="TurtleBot3 Burger Webots">
     <webots>
+        <!-- Lidar Device -->
         <device reference="LDS-01" type="Lidar">
             <ros>
                 <enabled>true</enabled>
@@ -11,6 +12,18 @@
             </ros>
         </device>
 
+        <!-- Camera Device -->
+        <device reference="camera" type="Camera">
+            <ros>
+                <enabled>true</enabled>
+                <updateRate>30</updateRate>
+                <topicName>/image_raw</topicName>
+                <cameraInfoTopicName>/camera_info</cameraInfoTopicName>
+                <frameName>camera_link</frameName>
+            </ros>
+        </device>
+
+        <!-- IMU Plugin -->
         <plugin type="webots_ros2_driver::Ros2IMU">
             <enabled>true</enabled>
             <updateRate>20</updateRate>
@@ -22,14 +35,17 @@
             <accelerometerName>accelerometer</accelerometerName>
         </plugin>
 
+        <!-- ROS 2 Control Plugin -->
         <plugin type="webots_ros2_control::Ros2Control" />
 
+        <!-- Example Plugin -->
         <!-- type="package_name.file_name.class_name" -->
         <plugin type="webots_ros2_turtlebot.plugin_example.PluginExample">
             <parameterExample>someValue</parameterExample>
         </plugin>
     </webots>
 
+    <!-- ROS 2 Control Configuration -->
     <ros2_control name="WebotsControl" type="system">
         <hardware>
             <plugin>webots_ros2_control::Ros2ControlSystem</plugin>

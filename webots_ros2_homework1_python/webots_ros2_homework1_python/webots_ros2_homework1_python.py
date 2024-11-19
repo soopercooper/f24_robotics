@@ -174,7 +174,7 @@ class RandomWalk(Node):
                     f"Orientation: {math.degrees(self.current_yaw):.2f}°, "
                     f"Tag ID: {tag_id}, Relative Position: {relative_position}"
                 )
-                self.logger.info(log_message)
+                self.get_logger().info(log_message)
                 # Also print to console if the message is different
                 console_message = f"Tag detected: ID {tag_id}"
                 if console_message != self.last_log_message:
@@ -270,7 +270,7 @@ class RandomWalk(Node):
             # Path is clear ahead, move forward
             self.cmd.linear.x = MAX_LINEAR_SPEED
             self.cmd.angular.z = NO_ROTATION_SPEED
-            new_message = ""
+            new_message = "Moving Straight"
             # Adjust orientation to maintain a certain distance from walls
             if right_lidar_min > 1.0:
                 # If the right side is clear, turn slightly right
