@@ -11,7 +11,7 @@ import logging
 
 # Constants for robot movement and distances
 LINEAR_VEL = 0.22               # Default linear velocity
-STOP_DISTANCE = 0.5             # Distance at which the robot should stop to avoid collision
+STOP_DISTANCE = 0.7             # Distance at which the robot should stop to avoid collision
 LIDAR_ERROR = 0.05              # Error tolerance for LIDAR readings
 LIDAR_AVOID_DISTANCE = 0.7      # Distance threshold for obstacle avoidance
 SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR  # Calculated safe stop distance considering error
@@ -42,9 +42,10 @@ class RandomWalk(Node):
         super().__init__('random_walk_node')
 
         # Initialize variables
-        self.turn = True  # Flag to initiate scanning rotation
+        self.turn = False  # Flag to initiate scanning rotation
         self.rotating = False  # Flag to indicate if rotation is in progress
         self.starting_yaw = None  # Yaw angle at the start of rotation
+        self.found_wall = False
         self.current_yaw = 0.0  # Current yaw angle
         self.position_x = 0.0  # Current x position
         self.position_y = 0.0  # Current y position
@@ -95,7 +96,7 @@ class RandomWalk(Node):
         self.timer = self.create_timer(0.5, self.timer_callback)
 
         # Create a timer to enable scanning after a certain time
-        # self.scan_timer = self.create_timer(10.0, self.enable_scanning)
+        self.scan_timer = self.create_timer(20.0, self.enable_scanning)
 
     def enable_scanning(self):
         """
@@ -189,34 +190,34 @@ class RandomWalk(Node):
         It uses processed LIDAR data to control the robot's movement for obstacle avoidance and navigation.
         """
         # If we are supposed to turn (scan for AprilTags)
-        # if self.turn:
-        #     if not self.rotating:
-        #         # Start the rotation
-        #         self.starting_yaw = self.current_yaw
-        #         self.rotating = True
-        #         new_message = "Starting 360-degree rotation for scanning."
-        #         if new_message != self.last_log_message:
-        #             self.get_logger().info(new_message)
-        #             self.last_log_message = new_message
+        if self.turn:
+            if not self.rotating:
+                # Start the rotation
+                self.starting_yaw = self.current_yaw
+                self.rotating = True
+                new_message = "Starting 360-degree rotation for scanning."
+                if new_message != self.last_log_message:
+                    self.get_logger().info(new_message)
+                    self.last_log_message = new_message
 
-        #     # Calculate the yaw difference
-        #     yaw_difference = (self.current_yaw - self.starting_yaw) % (2 * math.pi)
-        #     if yaw_difference >= (2 * math.pi - 0.1):  # Allow a small margin
-        #         # Completed full rotation
-        #         self.rotating = False
-        #         self.turn = False
-        #         self.cmd.angular.z = NO_ROTATION_SPEED
-        #         self.cmd.linear.x = NO_LINEAR_SPEED
-        #         new_message = "Completed rotation. Resuming normal movement."
-        #         if new_message != self.last_log_message:
-        #             self.get_logger().info(new_message)
-        #             self.last_log_message = new_message
-        #     else:
-        #         # Continue rotating
-        #         self.cmd.angular.z = MAX_CHECK_SPEED
-        #         self.cmd.linear.x = NO_LINEAR_SPEED
-        #         self.publisher_.publish(self.cmd)
-        #         return  # Wait until rotation is complete
+            # Calculate the yaw difference
+            yaw_difference = (self.current_yaw - self.starting_yaw) % (2 * math.pi)
+            if yaw_difference >= (2 * math.pi - 0.5):  # Allow a small margin
+                # Completed full rotation
+                self.rotating = False
+                self.turn = False
+                self.cmd.angular.z = NO_ROTATION_SPEED
+                self.cmd.linear.x = NO_LINEAR_SPEED
+                new_message = "Completed rotation. Resuming normal movement."
+                if new_message != self.last_log_message:
+                    self.get_logger().info(new_message)
+                    self.last_log_message = new_message
+            else:
+                # Continue rotating
+                self.cmd.angular.z = MAX_CHECK_SPEED
+                self.cmd.linear.x = NO_LINEAR_SPEED
+                self.publisher_.publish(self.cmd)
+                return  # Wait until rotation is complete
 
         # Obstacle avoidance and movement logic
         if len(self.scan_cleaned) == 0:
@@ -232,7 +233,17 @@ class RandomWalk(Node):
         right_lidar_min = min(self.scan_cleaned[270:330]) # Right side
         front_lidar_min = min(min(self.scan_cleaned[0:30]), min(self.scan_cleaned[330:]))
 
-        self.get_logger().info(f"{left_lidar_min} {front_lidar_min} {right_lidar_min}")
+        # self.get_logger().info(f"{left_lidar_min} {front_lidar_min} {right_lidar_min}")
+
+        if not self.found_wall:
+            self.cmd.linear.x = MAX_LINEAR_SPEED
+            self.cmd.angular.z = NO_ROTATION_SPEED
+            self.publisher_.publish(self.cmd)
+            self.get_logger().info(f"Looking for Wall")
+            if any([side < LIDAR_AVOID_DISTANCE for side in [left_lidar_min, front_lidar_min, right_lidar_min] ]):
+                self.found_wall = True
+                self.get_logger().info(f"Found Wall")
+            return
         
 
         # If there's an obstacle too close in front of the robot

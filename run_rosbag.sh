@@ -1,1 +1,1 @@
-ros2 bag record detections
+ros2 bag record /detections
