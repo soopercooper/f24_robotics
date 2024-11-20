@@ -55,9 +55,10 @@ class RandomWalk(Node):
         # Set to track IDs of detected AprilTags to avoid logging duplicates
         self.detected_tags = set()
 
-        # Set up logging to a file
-        logging.basicConfig(filename='apriltag_detections.log', level=logging.INFO)
-        self.logger = logging.getLogger('AprilTagLogger')
+        # Clear the apriltags file
+        self.april_tags_file = 'apriltag_detections.log'
+        with open(self.april_tags_file, 'w') as f:
+            f.write("Found April Tags List\n")
 
         # Initialize variable to store the last log message
         self.last_log_message = ''
@@ -157,38 +158,21 @@ class RandomWalk(Node):
         """
         timestamp = self.get_clock().now().to_msg()
         for detection in msg.detections:
-            tag_id = detection.id[0]
-            if tag_id not in self.detected_tags:
-                self.detected_tags.add(tag_id)
-                # Extract the relative position to the tag
-                pose = detection.pose.pose.pose
-                relative_position = (
-                    pose.position.x,
-                    pose.position.y,
-                    pose.position.z
-                )
-                # Log the detection with detailed information
-                log_message = (
-                    f"Time: {timestamp.sec}.{timestamp.nanosec}, "
-                    f"Robot Position: ({self.position_x:.2f}, {self.position_y:.2f}), "
-                    f"Orientation: {math.degrees(self.current_yaw):.2f}°, "
-                    f"Tag ID: {tag_id}, Relative Position: {relative_position}"
-                )
-                self.get_logger().info(log_message)
-                # Also print to console if the message is different
-                console_message = f"Tag detected: ID {tag_id}"
-                if console_message != self.last_log_message:
-                    self.get_logger().info(console_message)
-                    self.last_log_message = console_message
-
-                # Log full detection information to the console
-                self.get_logger().info(log_message)
+            if hasattr(detection, 'id'):
+                tag_id = detection.id
+                if tag_id not in self.detected_tags:
+                    self.detected_tags.add(tag_id)
+                    print(f"found tag {tag_id}")
+                    with open(self.april_tags_file, 'a') as f:
+                        f.write(f"{timestamp} {tag_id}\n")
 
     def timer_callback(self):
         """
         Timer callback function that executes at a fixed interval.
         It uses processed LIDAR data to control the robot's movement for obstacle avoidance and navigation.
         """
+        new_message = ""
+
         # If we are supposed to turn (scan for AprilTags)
         if self.turn:
             if not self.rotating:
@@ -196,7 +180,7 @@ class RandomWalk(Node):
                 self.starting_yaw = self.current_yaw
                 self.rotating = True
                 new_message = "Starting 360-degree rotation for scanning."
-                if new_message != self.last_log_message:
+                if new_message and new_message != self.last_log_message:
                     self.get_logger().info(new_message)
                     self.last_log_message = new_message
 
@@ -239,10 +223,16 @@ class RandomWalk(Node):
             self.cmd.linear.x = MAX_LINEAR_SPEED
             self.cmd.angular.z = NO_ROTATION_SPEED
             self.publisher_.publish(self.cmd)
-            self.get_logger().info(f"Looking for Wall")
+            new_message = "Looking for wall"
+            if new_message and new_message != self.last_log_message:
+                self.get_logger().info(new_message)
+                self.last_log_message = new_message
             if any([side < LIDAR_AVOID_DISTANCE for side in [left_lidar_min, front_lidar_min, right_lidar_min] ]):
                 self.found_wall = True
-                self.get_logger().info(f"Found Wall")
+                new_message = "Found Wall"
+                if new_message and new_message != self.last_log_message:
+                    self.get_logger().info(new_message)
+                    self.last_log_message = new_message
             return
         
 
@@ -252,7 +242,10 @@ class RandomWalk(Node):
             self.cmd.linear.x = NO_LINEAR_SPEED
             self.cmd.angular.z = MAX_ROTATION_SPEED
             self.publisher_.publish(self.cmd)
-            self.get_logger().info("Obstacle detected ahead. Rotating to avoid.")
+            new_message = "Obstacle detected ahead, starting to rotate to avoid"
+            if new_message and new_message != self.last_log_message:
+                self.get_logger().info(new_message)
+                self.last_log_message = new_message
             return
         # If there's an obstacle ahead but not too close, start avoiding it
         elif front_lidar_min < LIDAR_AVOID_DISTANCE:
@@ -260,7 +253,10 @@ class RandomWalk(Node):
             self.cmd.linear.x = MAX_LINEAR_SPEED / 4
             if right_lidar_min > left_lidar_min:
                 self.cmd.angular.z = -MAX_ROTATION_SPEED  # Turn right
-                self.get_logger().info("Avoiding obstacle: turning right.")
+                new_message = "Avoiding obstacle: turning right"
+                if new_message and new_message != self.last_log_message:
+                    self.get_logger().info(new_message)
+                    self.last_log_message = new_message
             # else:
                 # self.cmd.angular.z = MAX_ROTATION_SPEED  # Turn left
                 # new_message = "Avoiding obstacle: turning left."
@@ -287,7 +283,9 @@ class RandomWalk(Node):
                 self.cmd.angular.z = -MAX_ROTATION_SPEED * (proportional_speed ** .5)
                 self.cmd.linear.x = MAX_LINEAR_SPEED * 0.75
                 new_message = "Adjusting course: more turn right."
-            self.get_logger().info(new_message)
+            if new_message and new_message != self.last_log_message:
+                self.get_logger().info(new_message)
+                self.last_log_message = new_message
             self.publisher_.publish(self.cmd)
 
         # Periodically initiate scanning rotation
