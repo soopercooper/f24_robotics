@@ -76,6 +76,38 @@ def generate_launch_description():
         prefix=controller_manager_prefix,
         arguments=['joint_state_broadcaster'] + controller_manager_timeout,
     )
+    apriltag_node = Node(
+        package='apriltag_ros',
+        executable='apriltag_node',
+        name='apriltag_node',
+        output='screen',
+        remappings=[
+            ('/image_rect', '/image_raw'),
+            ('/camera_info', '/camera_info')
+        ],
+        parameters=[{
+            'tag_family': 'tag36h11',
+            'tag_size': 0.165,  # Replace with the actual size of your tags
+            'camera_frame': 'camera_link'
+        }]
+    )
+    camera_node = Node(
+        package='v4l2_camera',
+        executable='v4l2_camera_node',
+        name='camera_node',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    random_walk_node = Node(
+        package='webots_ros2_homework1_python',
+        executable='random_walk',
+        name='random_walk_node',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
+
+
     ros_control_spawners = [diffdrive_controller_spawner, joint_state_broadcaster_spawner]
 
     robot_description_path = os.path.join(package_dir, 'resource', 'turtlebot_webots.urdf')
@@ -99,12 +131,15 @@ def generate_launch_description():
         nodes_to_start= ros_control_spawners
     )
 
+    rviz_config_dir = os.path.join(get_package_share_directory('webots_ros2_homework1_python'),
+                                   'rviz', 'turtlebot3_apriltags.rviz')
+
 
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='f23_robotics_1.wbt',
+            default_value='turtlebot3_apriltags.wbt',
             description='Choose one of the world files from `/webots_ros2_turtlebot/world` directory'
         ),
         DeclareLaunchArgument(
@@ -112,9 +147,23 @@ def generate_launch_description():
             default_value='realtime',
             description='Webots startup mode'
         ),
+        DeclareLaunchArgument(
+            'tag_family',
+            default_value='tag36h11',
+            description='AprilTag family used for detection.'
+        ),
+        DeclareLaunchArgument(
+            'camera_topic',
+            default_value='/camera/image_raw',
+            description='Topic for the camera image stream.'
+        ),
         webots,
         webots._supervisor,
         waiting_nodes,
+
+        apriltag_node,
+        camera_node,
+        random_walk_node,
 
         robot_state_publisher,
         footprint_publisher,
@@ -129,5 +178,13 @@ def generate_launch_description():
                     launch.actions.EmitEvent(event=launch.events.Shutdown())
                 ],
             )
+        ),
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            arguments=['-d', rviz_config_dir],
+            parameters=[{'use_sim_time': use_sim_time}],
+            output='screen'
         ),
     ])

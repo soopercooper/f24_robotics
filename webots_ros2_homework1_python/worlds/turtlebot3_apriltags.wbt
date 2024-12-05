@@ -14,6 +14,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/adept/pioneer3/protos/Pioneer3dx.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/devices/microsoft/protos/Kinect.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/monicadelaine/webots_apriltag/master/apriltags/protos/tag36_11_00000.proto"
 
 WorldInfo {
   info [
@@ -25,11 +26,16 @@ Viewpoint {
   orientation -0.147 -0.461 0.875 5.58
   position -7.84 -5.72 0.285
   exposure 0.5
-  follow "TurtleBot3Burger:LDS-01"
+  follow "TurtleBot3Burger"
 }
 
+tag36_11_00000{
+  rotation 0 0 1 0
+  translation 0 0 0.15
+}
 TurtleBot3Burger {
-  translation -7.3611 -6.0432 0
+  translation -0.559 -0.0183 0
+  rotation -0.00119 -0.0183 -1 0.126
   controller "<extern>"
   controllerArgs [
     ""
@@ -38,11 +44,22 @@ TurtleBot3Burger {
     Solid {
       name "imu_link"
     }
-    GPS {
-    }
     InertialUnit {
       name "inertial_unit"
     }
+    Camera {
+      translation 0.06 0 0
+      children [
+        Pose {
+          translation 0 0 0
+          rotation 0 1 0 1.57
+        }
+      ]
+      width 3280
+      height 2464
+      fieldOfView 1
+    }
+
     RobotisLds01 {
     }
   ]
