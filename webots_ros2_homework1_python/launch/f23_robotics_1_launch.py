@@ -35,7 +35,7 @@ def generate_launch_description():
     package_dir = get_package_share_directory('webots_ros2_homework1_python')
     world = LaunchConfiguration('world')
     mode = LaunchConfiguration('mode')
-    use_sim_time = LaunchConfiguration('use_sim_time', default=True)
+    use_sim_time = LaunchConfiguration('use_sim_time', default=False)
 
     webots = WebotsLauncher(
         world=PathJoinSubstitution([package_dir, 'worlds', world]),
@@ -76,35 +76,35 @@ def generate_launch_description():
         prefix=controller_manager_prefix,
         arguments=['joint_state_broadcaster'] + controller_manager_timeout,
     )
-    apriltag_node = Node(
-        package='apriltag_ros',
-        executable='apriltag_node',
-        name='apriltag_node',
-        output='screen',
-        remappings=[
-            ('/image_rect', '/image_raw'),
-            ('/camera_info', '/camera_info')
-        ],
-        parameters=[{
-            'tag_family': 'tag36h11',
-            'tag_size': 0.165,  # Replace with the actual size of your tags
-            'camera_frame': 'camera_link'
-        }]
-    )
-    camera_node = Node(
-        package='v4l2_camera',
-        executable='v4l2_camera_node',
-        name='camera_node',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
-    random_walk_node = Node(
-        package='webots_ros2_homework1_python',
-        executable='random_walk',
-        name='random_walk_node',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
+    #apriltag_node = Node(
+    #    package='apriltag_ros',
+    #    executable='apriltag_node',
+    #    name='apriltag_node',
+    #    output='screen',
+    #    remappings=[
+    #        ('/image_rect', '/image_raw'),
+    #        ('/camera_info', '/camera_info')
+    #    ],
+    #    parameters=[{
+    #        'tag_family': 'tag36h11',
+    #        'tag_size': 0.165,  # Replace with the actual size of your tags
+    #        'camera_frame': 'camera_link'
+    #    }]
+    #)
+    #camera_node = Node(
+    #    package='v4l2_camera',
+    #    executable='v4l2_camera_node',
+    #    name='camera_node',
+    #    output='screen',
+    #    parameters=[{'use_sim_time': use_sim_time}]
+    #)
+    #random_walk_node = Node(
+    #    package='webots_ros2_homework1_python',
+    #    executable='random_walk',
+    #    name='random_walk_node',
+    #    output='screen',
+    #    parameters=[{'use_sim_time': use_sim_time}]
+    #)
 
 
 
@@ -139,7 +139,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='turtlebot3_apriltags.wbt',
+            default_value='Greek Assembly Hall Final.wbt',
             description='Choose one of the world files from `/webots_ros2_turtlebot/world` directory'
         ),
         DeclareLaunchArgument(
@@ -147,11 +147,11 @@ def generate_launch_description():
             default_value='realtime',
             description='Webots startup mode'
         ),
-        DeclareLaunchArgument(
-            'tag_family',
-            default_value='tag36h11',
-            description='AprilTag family used for detection.'
-        ),
+        #DeclareLaunchArgument(
+        #    'tag_family',
+        #    default_value='tag36h11',
+        #    description='AprilTag family used for detection.'
+        #),
         DeclareLaunchArgument(
             'camera_topic',
             default_value='/camera/image_raw',
@@ -161,9 +161,9 @@ def generate_launch_description():
         webots._supervisor,
         waiting_nodes,
 
-        apriltag_node,
-        camera_node,
-        random_walk_node,
+        #apriltag_node,
+        #camera_node,
+        #random_walk_node,
 
         robot_state_publisher,
         footprint_publisher,

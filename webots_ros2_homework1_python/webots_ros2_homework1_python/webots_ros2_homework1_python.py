@@ -3,7 +3,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from apriltag_msgs.msg import AprilTagDetectionArray
+#from apriltag_msgs.msg import AprilTagDetectionArray
 from rclpy.qos import ReliabilityPolicy, QoSProfile
 from transforms3d.euler import quat2euler
 import math
@@ -53,12 +53,12 @@ class RandomWalk(Node):
         self.scan_cleaned = []         # Processed LIDAR scan data
 
         # Set to track IDs of detected AprilTags to avoid logging duplicates
-        self.detected_tags = set()
+        #self.detected_tags = set()
 
         # Clear the apriltags file
-        self.april_tags_file = 'apriltag_detections.log'
-        with open(self.april_tags_file, 'w') as f:
-            f.write("Found April Tags List\n")
+        #self.april_tags_file = 'apriltag_detections.log'
+        #with open(self.april_tags_file, 'w') as f:
+        #    f.write("Found April Tags List\n")
 
         # Initialize variable to store the last log message
         self.last_log_message = ''
@@ -75,12 +75,12 @@ class RandomWalk(Node):
         )
 
         # Create subscription to AprilTag detections topic '/detections'
-        self.create_subscription(
-            AprilTagDetectionArray,
-            '/detections',
-            self.apriltag_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
-        )
+        #self.create_subscription(
+        #    AprilTagDetectionArray,
+        #    '/detections',
+        #    self.apriltag_callback,
+        #    QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        #)
 
         # Create subscription to Odometry data topic '/odom'
         self.create_subscription(
@@ -149,22 +149,22 @@ class RandomWalk(Node):
         self.position_x = msg.pose.pose.position.x
         self.position_y = msg.pose.pose.position.y
 
-    def apriltag_callback(self, msg):
-        """
-        Callback function for AprilTag detections.
-        Logs information about newly detected AprilTags to avoid repeated logging of the same tag.
-
-        :param msg: The AprilTagDetectionArray message containing detected AprilTags data
-        """
-        timestamp = self.get_clock().now().to_msg()
-        for detection in msg.detections:
-            if hasattr(detection, 'id'):
-                tag_id = detection.id
-                if tag_id not in self.detected_tags:
-                    self.detected_tags.add(tag_id)
-                    print(f"found tag {tag_id}")
-                    with open(self.april_tags_file, 'a') as f:
-                        f.write(f"{timestamp} {tag_id}\n")
+    #def apriltag_callback(self, msg):
+    #    """
+    #    Callback function for AprilTag detections.
+    #    Logs information about newly detected AprilTags to avoid repeated logging of the same tag.
+    #
+    #    :param msg: The AprilTagDetectionArray message containing detected AprilTags data
+    #    """
+    #    timestamp = self.get_clock().now().to_msg()
+    #    for detection in msg.detections:
+    #        if hasattr(detection, 'id'):
+    #            tag_id = detection.id
+    #            if tag_id not in self.detected_tags:
+    #                self.detected_tags.add(tag_id)
+    #                print(f"found tag {tag_id}")
+    #                with open(self.april_tags_file, 'a') as f:
+    #                    f.write(f"{timestamp} {tag_id}\n")
 
     def timer_callback(self):
         """
@@ -174,34 +174,34 @@ class RandomWalk(Node):
         new_message = ""
 
         # If we are supposed to turn (scan for AprilTags)
-        if self.turn:
-            if not self.rotating:
-                # Start the rotation
-                self.starting_yaw = self.current_yaw
-                self.rotating = True
-                new_message = "Starting 360-degree rotation for scanning."
-                if new_message and new_message != self.last_log_message:
-                    self.get_logger().info(new_message)
-                    self.last_log_message = new_message
+        #if self.turn:
+        #    if not self.rotating:
+        #        # Start the rotation
+        #        self.starting_yaw = self.current_yaw
+        #        self.rotating = True
+        #        new_message = "Starting 360-degree rotation for scanning."
+        #        if new_message and new_message != self.last_log_message:
+        #            self.get_logger().info(new_message)
+        #            self.last_log_message = new_message
 
             # Calculate the yaw difference
-            yaw_difference = (self.current_yaw - self.starting_yaw) % (2 * math.pi)
-            if yaw_difference >= (2 * math.pi - 0.5):  # Allow a small margin
-                # Completed full rotation
-                self.rotating = False
-                self.turn = False
-                self.cmd.angular.z = NO_ROTATION_SPEED
-                self.cmd.linear.x = NO_LINEAR_SPEED
-                new_message = "Completed rotation. Resuming normal movement."
-                if new_message != self.last_log_message:
-                    self.get_logger().info(new_message)
-                    self.last_log_message = new_message
-            else:
-                # Continue rotating
-                self.cmd.angular.z = MAX_CHECK_SPEED
-                self.cmd.linear.x = NO_LINEAR_SPEED
-                self.publisher_.publish(self.cmd)
-                return  # Wait until rotation is complete
+        #    yaw_difference = (self.current_yaw - self.starting_yaw) % (2 * math.pi)
+        #    if yaw_difference >= (2 * math.pi - 0.5):  # Allow a small margin
+        #        # Completed full rotation
+        #        self.rotating = False
+        #        self.turn = False
+        #        self.cmd.angular.z = NO_ROTATION_SPEED
+        #        self.cmd.linear.x = NO_LINEAR_SPEED
+        #        new_message = "Completed rotation. Resuming normal movement."
+        #        if new_message != self.last_log_message:
+        #            self.get_logger().info(new_message)
+        #            self.last_log_message = new_message
+        #    else:
+        #        # Continue rotating
+        #        self.cmd.angular.z = MAX_CHECK_SPEED
+        #        self.cmd.linear.x = NO_LINEAR_SPEED
+        #        self.publisher_.publish(self.cmd)
+        #        return  # Wait until rotation is complete
 
         # Obstacle avoidance and movement logic
         if len(self.scan_cleaned) == 0:
@@ -209,13 +209,13 @@ class RandomWalk(Node):
             return
 
         # Determine minimum distances in critical directions from the LaserScan data
-        # left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])   # Left side
-        # right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX]) # Right side
-        # front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX]) # Front
+        left_lidar_min = min(self.scan_cleaned[LEFT_SIDE_INDEX:LEFT_FRONT_INDEX])   # Left side
+        right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX]) # Right side
+        front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX]) # Front
 
-        left_lidar_min = min(self.scan_cleaned[30:90])   # Left side
-        right_lidar_min = min(self.scan_cleaned[270:330]) # Right side
-        front_lidar_min = min(min(self.scan_cleaned[0:30]), min(self.scan_cleaned[330:]))
+        #left_lidar_min = min(self.scan_cleaned[30:90])   # Left side
+        #right_lidar_min = min(self.scan_cleaned[270:330]) # Right side
+        #front_lidar_min = min(min(self.scan_cleaned[0:30]), min(self.scan_cleaned[330:]))
 
         # self.get_logger().info(f"{left_lidar_min} {front_lidar_min} {right_lidar_min}")
 
