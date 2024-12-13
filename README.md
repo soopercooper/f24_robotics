@@ -1,5 +1,7 @@
 # Cooper Olson Final Project : Autonomous Indoor Search 
 
+The trials were run on 'Greek Assembly Hall Final.wbt' and 'maze.wbt'. To launch either world, make sure the file name in the launch file is the correct .wbt file.
+
 ## Algorithm
 1. **Wall Following**:
    - The robot moves along walls using LIDAR data.
@@ -14,12 +16,12 @@
 
 ## Running The Simulation
 
-Terminal 1:
+Terminal 1 (Launchs the specified world file):
 ```bash
 bash build_and_run_simulation.sh
 ```
 
-Terminal 2:
+Terminal 2 (Runs the controller):
 ```bash
 bash run_python.sh
 ```
