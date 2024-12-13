@@ -37,15 +37,13 @@ Terminal 4 (Saves map after turtlebot has explored):
 ros2 run nav2_map_server map_saver_cli -f ~/map
 ```
 
-Maze Trial Run 1 Map
+Resultant Maps
+
+
+
 ![map1mazepic](https://github.com/user-attachments/assets/36d8893f-1802-4e38-b59d-ea8812c96953)
-Maze Trial Run 2 Map
 ![map2mazepic](https://github.com/user-attachments/assets/7129c60e-7d57-40ef-9afb-8f3ba98cf7cc)
-Maze Trial Run 3 Map
 ![map3mazepic](https://github.com/user-attachments/assets/13f394dc-7bd7-4352-abd9-17c8c4dbec19)
-Greek Hall Trial Run 1 Map
 ![map1greekpic](https://github.com/user-attachments/assets/fe86ae62-b3a5-4964-9a27-e81f5fcb711f)
-Greek Hall Trial Run 2 Map
 ![map2greekpic](https://github.com/user-attachments/assets/0aec6e76-3a84-4855-a484-456b013e0376)
-Greek Hall Trial Run 3 Map
 ![map3greekpic](https://github.com/user-attachments/assets/9ef5b64f-f6b3-411f-ba10-acdafec5b919)
